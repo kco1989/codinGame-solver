@@ -1,7 +1,5 @@
-import java.awt.event.ItemEvent;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 /**
@@ -16,7 +14,74 @@ import java.util.stream.Stream;
  * PASS to do nothing this turn.
  * PICK
  */
-public class PlayerEmpty {
+
+public class Player {
+    static class Card {
+        public int cardNumber;              // 卡片唯一编号
+        public int instanceId;              // 卡片实例id
+        public int location;                //  0 在手牌  1， 在场上 2. 在对面场上
+        public int cardType;                // always 0 for this league.
+        public int cost;                    // 需要消耗的费用
+        public int attack;                  // 攻击力
+        public int defense;                 // 守备力
+        public String abilities;            // 能力描述
+        public int myHealthChange;          //  to be ignored in this league.
+        public int opponentHealthChange;    // to be ignored in this league.
+        public int cardDraw;                // to be ignored in this league.
+
+        public String summom(){
+            return "SUMMON " + this.instanceId;
+        }
+
+        public String attack(Card otherCard){
+            String result = "PASS";
+            if (otherCard != null){
+                result = "ATTACK " + this.instanceId + " " + otherCard.instanceId;
+            }else{
+                result = "ATTACK " + this.instanceId + " -1";
+            }
+            return result;
+        }
+
+        public String attack(){
+            return attack(null);
+        }
+
+    }
+
+    static class PlayInfo {
+        public int health ;   // 生命力
+        public int mana ;     // 法力值
+        public int deck;      // 剩余卡牌
+        public int rune ;     // to be ignored in this league
+
+        @Override
+        public String toString() {
+            return "PlayInfo{" +
+                    "health=" + health +
+                    ", mana=" + mana +
+                    ", deck=" + deck +
+                    ", rune=" + rune +
+                    '}';
+        }
+    }
+
+    static enum PlayState {
+        Draft,
+        Battle;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
     public static void main(String args[]) {
         Scanner in = new Scanner(System.in);
         PlayState playState = PlayState.Draft;
@@ -102,7 +167,15 @@ public class PlayerEmpty {
             if (!opponentSideCards.isEmpty()){
                 opponentSideCards = opponentSideCards.stream().sorted((o1, o2) -> o1.defense - o2.defense).collect(Collectors.toList());
                 for (Card card : opponentSideCards){
-                    Optional<Card> first = playerSideCards.stream().filter(item -> item.attack >= card.defense && item.defense > item.attack).findFirst();
+                    Optional<Card> first = playerSideCards.stream().filter(item -> {
+                        boolean result = false;
+                        if (card.defense <= card.attack){
+                            result = result || (item.attack >= card.defense && item.defense > card.attack);
+                        }else{
+                            result = result || (item.attack >= card.defense && item.defense >= card.attack);
+                        }
+                        return result;
+                    }).findFirst();
                     if (first.isPresent()){
                         list.add(first.get().attack(card));
                         playerSideCards.remove(first.get());

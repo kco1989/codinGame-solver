@@ -22,7 +22,7 @@ public class Main {
         Constants.VERBOSE_LEVEL = 2;
         
         //set ruleset here
-        System.setProperty("league.level", "4");
+        System.setProperty("league.level", "1");
         
         gameRunner.start();
     }
