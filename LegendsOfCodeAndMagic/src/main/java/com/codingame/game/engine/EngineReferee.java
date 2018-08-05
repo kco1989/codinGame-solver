@@ -157,7 +157,11 @@ public class EngineReferee {
             sdkplayer.execute();
 
             try {
-                String output = sdkplayer.getOutputs().get(0);
+                List<String> outputs = sdkplayer.getOutputs();
+                String output = "";
+                if (!outputs.isEmpty()){
+                    output = outputs.get(0);
+                }
                 actionsToHandle = Action.parseSequence(output);
                 if (Constants.VERBOSE_LEVEL > 2) System.out.println(" (returned " + actionsToHandle.size() + " actions)");
             } catch (InvalidActionHard e) {

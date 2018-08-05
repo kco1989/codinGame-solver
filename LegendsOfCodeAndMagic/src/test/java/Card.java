@@ -5,6 +5,7 @@
  * PASS to do nothing this turn.
  * PICK
  * Created by lvsw on 2018/8/5.
+ * BCDGLW
  */
 public class Card {
     public int cardNumber;              // 卡片唯一编号
