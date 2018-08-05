@@ -1,0 +1,27 @@
+- key: activemqbeat
+  title: activemqbeat
+  description: Contains ActiveMQ data
+  fields:
+    - name: queue
+      type: group
+      fields:
+        - name: name
+          type: text
+          description: >
+            Name of the queue
+        - name: size
+          type: integer
+          description: >
+            Number of pending messages
+        - name: consumer_count
+          type: integer
+          description: >
+            Number of consumers
+        - name: enqueue_count
+          type: integer
+          description: >
+            Number of messages enqueued
+        - name: dequeue_count
+          type: integer
+          description: >
+            Number of messages dequeued

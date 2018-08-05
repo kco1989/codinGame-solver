@@ -1,0 +1,10 @@
+################### Activemqbeat Configuration Example #########################
+
+############################# Activemqbeat ######################################
+
+activemqbeat:
+  # Defines how often an event is sent to the output
+  period: 10s
+  url: "http://localhost:8161"
+  username: "admin"
+  password: "admin"

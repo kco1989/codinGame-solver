@@ -1,0 +1,5 @@
+= Activemqbeat Docs
+
+Welcome to the Activemqbeat documentation.
+
+
