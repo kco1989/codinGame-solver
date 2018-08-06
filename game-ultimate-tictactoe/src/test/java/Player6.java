@@ -38,15 +38,17 @@ class Player6 {
 
     // 动作
     static class PriorityAction implements Comparable<PriorityAction> {
-        private static Map<String, PriorityAction> actionPool = new HashMap<>();
         private int row, col;               // 行列
         private int niceRow, niceCol;
         private int gridPosition, position;
         private int nineNumber;
         private int priority;
 
+        public static Map<String, PriorityAction> newPool(){
+            return new HashMap<>();
+        }
 
-        public static PriorityAction getPriorityAction(int row, int col){
+        public static PriorityAction getPriorityAction(Map<String, PriorityAction> actionPool, int row, int col){
             String key = String.format("(%d, %d)", row, col);
             return actionPool.computeIfAbsent(key, k -> new PriorityAction(row, col));
         }
@@ -118,11 +120,17 @@ class Player6 {
 
     }
 
+    static class GameInfo{
+        int[][] ticTacToe = new int[9][9];
+        int[][] ticTacToeGrid = new int[3][3];
+        ArrayList<PriorityAction> allValidAction = new ArrayList<>();
+        Map<String, PriorityAction> poolAction = PriorityAction.newPool();
+    }
+
     // 统计
     static class GridSum{
         int sum;
         ArrayList<PriorityAction> actions;
-
         public GridSum(int sum, ArrayList<PriorityAction> actions) {
             this.sum = sum;
             this.actions = actions;
@@ -131,45 +139,41 @@ class Player6 {
 
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
-        int[][] ticTacToe = new int[9][9];              // Level 1 只会用到 3 * 3,
-        int[][] ticTacToeGrid = new int[3][3];          // Level 2 才会用到,大格子当前的比分状况
-
-        // 当前棋面所有可以下的操作
-        ArrayList<PriorityAction> allValidAction = new ArrayList<>();    
+        GameInfo gameInfo = new GameInfo();
 
         while (true) {
             int opponentRow = in.nextInt();
             int opponentCol = in.nextInt();
-            PriorityAction opponentAction = PriorityAction.getPriorityAction(opponentRow, opponentCol);
+            PriorityAction opponentAction = PriorityAction.getPriorityAction(gameInfo.poolAction, opponentRow, opponentCol);
 
             int validActionCount = in.nextInt();
             ArrayList<PriorityAction> currentValidAction = new ArrayList<>();
             for (int i = 0; i < validActionCount; i++) {
                 int row = in.nextInt();
                 int col = in.nextInt();
-                PriorityAction priorityAction = PriorityAction.getPriorityAction(row, col);
-                if (! allValidAction.contains(priorityAction)){
-                    allValidAction.add(priorityAction);
+                PriorityAction priorityAction = PriorityAction.getPriorityAction(gameInfo.poolAction, row, col);
+                if (! gameInfo.allValidAction.contains(priorityAction)){
+                    gameInfo.allValidAction.add(priorityAction);
                 }
                 currentValidAction.add(priorityAction);
             }
 
             // 判断对手当前操作是否有效
             if (opponentAction.row != -1){
-                ticTacToe[opponentAction.row][opponentAction.col] = G_OPPONENT;
-                checkProiorty(ticTacToe, opponentAction, allValidAction);
-                checkWinner(ticTacToe, ticTacToeGrid, opponentAction, allValidAction, false);
+                gameInfo.ticTacToe[opponentAction.row][opponentAction.col] = G_OPPONENT;
+                checkProiorty(opponentAction, gameInfo);
+                checkWinner(opponentAction, false, gameInfo);
             }
 
             PriorityQueue<PriorityAction> queue = new PriorityQueue<>(currentValidAction);
             PriorityAction poll = queue.poll();
-            allValidAction.remove(poll);
+            gameInfo.allValidAction.remove(poll);
             System.out.println(poll);
-            ticTacToe[poll.row][poll.col] = G_PLAY;
-            checkProiorty(ticTacToe, poll, allValidAction);
-            checkWinner(ticTacToe, ticTacToeGrid, poll, allValidAction, true);
+            gameInfo.ticTacToe[poll.row][poll.col] = G_PLAY;
+            checkProiorty(poll, gameInfo);
+            checkWinner(poll, true, gameInfo);
             StringBuilder sb = new StringBuilder();
-            allValidAction.stream().forEach(item -> {
+            gameInfo.allValidAction.stream().forEach(item -> {
                 sb.append("( " + item.row + " , " + item.col + " ) = " + item.priority + "\n");
             });
             System.err.println(sb.toString());
@@ -180,48 +184,49 @@ class Player6 {
      * 判断小格子上是否已经有胜利者出现
      * 只有level2级别才会使用这个函数
      */
-    private static void checkWinner(int[][] ticTacToe, int[][] ticTacToeGrid, PriorityAction action, ArrayList<PriorityAction> allValidAction, boolean isPlay) {
+    private static void checkWinner(PriorityAction action, boolean isPlay, GameInfo gameInfo) {
         int gValue = isPlay ? G_PLAY : G_OPPONENT;
-        List<GridSum> gridSumList = checkGrid(action.nineNumber, ticTacToe);
+        List<GridSum> gridSumList = checkGrid(action.nineNumber, gameInfo.ticTacToe, gameInfo);
         long count = gridSumList.stream().filter(item -> item.sum == gValue * 3).count();
         if (count == 0){
             return;
         }
 
-        // 删除出现胜利者的其他还未使用的格子
-        List<PriorityAction> collect = allValidAction.stream().filter(item -> item.nineNumber == action.nineNumber).collect(Collectors.toList());
-        allValidAction.removeAll(collect);
 
-        ticTacToeGrid[action.niceRow][action.niceCol] = gValue;
-        List<GridSum> gridAllSumList = checkGrid(0, ticTacToeGrid);
+        // 删除出现胜利者的其他还未使用的格子
+        List<PriorityAction> collect = gameInfo.allValidAction.stream().filter(item -> item.nineNumber == action.nineNumber).collect(Collectors.toList());
+        gameInfo.allValidAction.removeAll(collect);
+
+        gameInfo.ticTacToeGrid[action.niceRow][action.niceCol] = gValue;
+        List<GridSum> gridAllSumList = checkGrid(0, gameInfo.ticTacToeGrid, gameInfo);
         for (GridSum gridSum : gridAllSumList){
             if (gridSum.sum == 2 * G_PLAY){
                 PriorityAction action1 = gridSum.actions.get(0);
-                long winCount = checkGrid(action1.nineNumber, ticTacToe)
+                long winCount = checkGrid(action1.nineNumber, gameInfo.ticTacToe, gameInfo)
                         .stream()
                         .filter(item -> item.sum == 0 || item.sum == G_PLAY || item.sum == 2 * G_PLAY)
                         .count();
                 if (winCount == 0){
-                    allValidAction.stream()
+                    gameInfo.allValidAction.stream()
                             .filter(item -> item.nineNumber == action1.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(-P_ALL_WIN));
                 }else{
-                    allValidAction.stream()
+                    gameInfo.allValidAction.stream()
                             .filter(item -> item.nineNumber == action1.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(P_ALL_WIN));
                 }
             }else if (gridSum.sum == 2 * G_OPPONENT){
                 PriorityAction action2 = gridSum.actions.get(0);
-                long loseCount = checkGrid(action2.nineNumber, ticTacToe).stream()
+                long loseCount = checkGrid(action2.nineNumber, gameInfo.ticTacToe, gameInfo).stream()
                         .filter(item -> item.sum == 0 || item.sum == G_OPPONENT || item.sum == 2 * G_OPPONENT)
                         .count();
 
                 if (loseCount == 0){
-                    allValidAction.stream()
+                    gameInfo.allValidAction.stream()
                             .filter(item -> item.nineNumber == action2.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(- P_ALL_LOST));
                 }else {
-                    allValidAction.stream()
+                    gameInfo.allValidAction.stream()
                             .filter(item -> item.nineNumber == action2.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(P_ALL_LOST));
                 }
@@ -232,15 +237,15 @@ class Player6 {
     /**
      *  检查权限
      */
-    private static void checkProiorty(int[][] grid, PriorityAction action, ArrayList<PriorityAction> allValidAction) {
+    private static void checkProiorty(PriorityAction action, GameInfo gameInfo) {
         // 统计当前操作格子棋面情况
-        List<GridSum> gridSumList = checkGrid(action.nineNumber, grid);
+        List<GridSum> gridSumList = checkGrid(action.nineNumber, gameInfo.ticTacToe, gameInfo);
         for (GridSum gridSum : gridSumList){
-            changeProiorty(gridSum, allValidAction);
+            changePriority(gridSum);
         }
     }
 
-    private static void changeProiorty(GridSum gridSum, ArrayList<PriorityAction> actions) {
+    private static void changePriority(GridSum gridSum) {
         if (gridSum.actions.isEmpty()){
             return;
         }
@@ -260,7 +265,7 @@ class Player6 {
     /**
      * 统计格子 横三竖三斜二的得分情况
      */
-    private static List<GridSum> checkGrid(int nineNumber, int[][] grid) {
+    private static List<GridSum> checkGrid(int nineNumber, int[][] grid, GameInfo gameInfo) {
         int startRow = nineNumber / 3 * 3;
         int startCol = nineNumber / 3 * 3;
         List<GridSum> gridSumList = new ArrayList<>();
@@ -268,26 +273,26 @@ class Player6 {
             ArrayList<PriorityAction> rowAction = new ArrayList<>();
             int rowSum = grid[startRow + i][startCol] + grid[startRow + i][startCol + 1] + grid[startRow + i][startCol + 2];
             if (grid[startRow + i][startCol] == G_ENTMP){
-                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol));
+                rowAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + i, startCol));
             }
             if (grid[startRow + i][startCol + 1] == G_ENTMP){
-                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol + 1));
+                rowAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + i, startCol + 1));
             }
             if (grid[startRow + i][startCol + 2] == G_ENTMP){
-                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol + 2));
+                rowAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + i, startCol + 2));
             }
             gridSumList.add(new GridSum(rowSum, rowAction));
 
             ArrayList<PriorityAction> colAction = new ArrayList<>();
             int colSum = grid[startRow][startCol + i] + grid[startRow + 1][startCol + i] + grid[startRow + 2][startCol + i];
             if (grid[startRow][startCol + i] == G_ENTMP){
-                colAction.add(PriorityAction.getPriorityAction(startRow, startCol + i));
+                colAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow, startCol + i));
             }
             if (grid[startRow + 1][startCol + i] == G_ENTMP){
-                colAction.add(PriorityAction.getPriorityAction(startRow + 1, startCol + i));
+                colAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 1, startCol + i));
             }
             if (grid[startRow + 2][startCol + i] == G_ENTMP){
-                colAction.add(PriorityAction.getPriorityAction(startRow + 2, startCol + i));
+                colAction.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 2, startCol + i));
             }
             gridSumList.add(new GridSum(colSum, colAction));
         }
@@ -295,26 +300,26 @@ class Player6 {
         int rake1Sum = grid[startRow][startCol] + grid[startRow + 1][startCol + 1] + grid[startRow + 2][startCol + 2];
         ArrayList<PriorityAction> rake1Action = new ArrayList<>();
         if (grid[startRow][startCol] == G_ENTMP){
-            rake1Action.add(PriorityAction.getPriorityAction(startRow, startCol));
+            rake1Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow, startCol));
         }
         if (grid[startRow + 1][startCol + 1] == G_ENTMP){
-            rake1Action.add(PriorityAction.getPriorityAction(startRow + 1, startCol + 1));
+            rake1Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 1, startCol + 1));
         }
         if (grid[startRow + 2][startCol + 2] == G_ENTMP){
-            rake1Action.add(PriorityAction.getPriorityAction(startRow + 2, startCol + 2));
+            rake1Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 2, startCol + 2));
         }
         gridSumList.add(new GridSum(rake1Sum, rake1Action));
 
         int rake2Sum = grid[startRow + 2][startCol] + grid[startRow + 1][startCol + 1] + grid[startRow][startCol + 2];
         ArrayList<PriorityAction> rake2Action = new ArrayList<>();
         if (grid[startRow + 2][startCol] == G_ENTMP){
-            rake2Action.add(PriorityAction.getPriorityAction(startRow + 2, startCol));
+            rake2Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 2, startCol));
         }
         if (grid[startRow + 1][startCol + 1] == G_ENTMP){
-            rake2Action.add(PriorityAction.getPriorityAction(startRow + 1, startCol + 1));
+            rake2Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow + 1, startCol + 1));
         }
         if (grid[startRow][startCol + 2] == G_ENTMP){
-            rake2Action.add(PriorityAction.getPriorityAction(startRow, startCol + 2));
+            rake2Action.add(PriorityAction.getPriorityAction(gameInfo.poolAction, startRow, startCol + 2));
         }
         gridSumList.add(new GridSum(rake2Sum, rake2Action));
         return gridSumList;
