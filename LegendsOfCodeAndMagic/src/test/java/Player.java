@@ -12,6 +12,8 @@ import java.util.stream.Collectors;
  * SUMMON id to summon the creature id from your hand.
  * ATTACK id1 id2 to attack creature id2 with creature id1.
  * ATTACK id -1 to attack the opponent directly with creature id.
+ * USE id1 id2 to use item id1 on creature id2.
+ * USE id -1 to use item id.
  * PASS to do nothing this turn.
  * PICK
  * BCDGLW
@@ -53,6 +55,25 @@ public class Player {
             return attack(null);
         }
 
+        /**
+         * 系命
+         */
+        public boolean isDrain(){
+            return this.abilities.lastIndexOf('D') > 0;
+        }
+
+        /**
+         * 致命
+         */
+        public boolean isLethal(){
+            return this.abilities.lastIndexOf('L') > 0;
+        }
+        /**
+         * 护盾
+         */
+        public boolean isWard(){
+            return this.abilities.lastIndexOf('W') > 0;
+        }
         /**
          * 是否有“突破”能力
          * @return

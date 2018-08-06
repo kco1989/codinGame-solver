@@ -1,17 +1,14 @@
 import java.util.*;
+import java.util.stream.Collectors;
 
 class Player6 {
 
     public static final int P_ALL_WIN = 100000;         // 全局赢了
     public static final int P_ALL_LOST = 50000;         // 全局要输了
 
+    public static final int P_WIN = 10000;               // 会赢
+    public static final int P_LOSE = 5000;               // 将要输
 
-    public static final int P_CENTER_WIN = 11000;           // 中心的胜利
-    public static final int P_ANGLE_WIN = 9000;            // 角的胜利
-    public static final int P_SIDE_WIN = 7000;             // 边的胜利
-    public static final int P_CENTER_LOSE = 5000;          // 中心的防止输
-    public static final int P_ANGLE_LOSE = 3000;           // 角的防止输
-    public static final int P_SIDE_LOSE = 1000;            // 边的泛指输
 
     public static final int P_CENTRE_CENTRE = 170;        // 中心的中心
     public static final int P_CENTRE_ANGLE = 150;         // 中心的角
@@ -24,13 +21,7 @@ class Player6 {
     public static final int P_SIDE_SIDE = 10;            // 边的边
     public static final int P_STEP = 1;                 // 在没有赢或者输的情况,好的位置
 
-    public static final int[] P_WIN = {
-            P_CENTER_WIN, P_ANGLE_WIN, P_SIDE_WIN
-    };
-
-    public static final int[] P_LOSE = {
-            P_CENTER_LOSE, P_ANGLE_LOSE, P_SIDE_LOSE
-    };
+    // 权限分组
     public static final int[][] PROIORTY = {
             {P_CENTRE_CENTRE, P_CENTRE_ANGLE, P_CENTRE_SIDE},
             {P_ANGLE_CENTRE, P_ANGLE_ANGLE, P_ANGLE_SIDE},
@@ -44,25 +35,34 @@ class Player6 {
     public static final int G_ENTMP = 0;
     public static final int G_PLAY = 10;
     public static final int G_OPPONENT = 200;
-    static class ProiortyAction implements Comparable<ProiortyAction> {
-        int row, col;
-        int niceRow, niceCol;
-        int nicePosition, position;
-        int ninePos;
-        int priority;
 
-        public ProiortyAction(int row, int col) {
-            this.ninePos = row / 3 * 3 + col / 3;
-            this.niceRow = this.ninePos / 3;
-            this.niceCol = this.ninePos % 3;
+    // 动作
+    static class PriorityAction implements Comparable<PriorityAction> {
+        private static Map<String, PriorityAction> actionPool = new HashMap<>();
+        private int row, col;               // 行列
+        private int niceRow, niceCol;
+        private int gridPosition, position;
+        private int nineNumber;
+        private int priority;
+
+
+        public static PriorityAction getPriorityAction(int row, int col){
+            String key = String.format("(%d, %d)", row, col);
+            return actionPool.computeIfAbsent(key, k -> new PriorityAction(row, col));
+        }
+
+        private PriorityAction(int row, int col) {
+            this.nineNumber = row / 3 * 3 + col / 3;
+            this.niceRow = this.nineNumber / 3;
+            this.niceCol = this.nineNumber % 3;
             this.row = row;
             this.col = col;
             if (this.niceRow == this.niceCol && this.niceRow == 1){
-                this.nicePosition = POS_CENTER;
+                this.gridPosition = POS_CENTER;
             }else if((this.niceRow + this.niceCol) % 2 == 0){
-                this.nicePosition = POS_ANGLE;
+                this.gridPosition = POS_ANGLE;
             }else {
-                this.nicePosition = POS_SIDE;
+                this.gridPosition = POS_SIDE;
             }
             int r = this.row - this.niceRow * 3;
             int c = this.col - this.niceCol * 3;
@@ -73,21 +73,23 @@ class Player6 {
             }else {
                 this.position = POS_SIDE;
             }
-            this.priority = PROIORTY[this.nicePosition][this.position];
+            this.priority = PROIORTY[this.gridPosition][this.position];
         }
 
-        public void addPriority(ArrayList<ProiortyAction> actions, int priority){
-            int index = actions.indexOf(this);
-            if (index != -1){
-                ProiortyAction action = actions.get(index);
-                actions.remove(action);
-                action.priority = action.priority + priority;
-                actions.add(action);
+        public void addPriority(int priority){
+            this.priority += priority;
+        }
+
+        public void addWinOrLosePriority(int priority){
+            if (priority > 0 && this.priority < priority){
+                this.priority += priority;
+            }else if(priority < 0 && this.priority > -priority){
+                this.priority += priority;
             }
         }
 
         @Override
-        public int compareTo(ProiortyAction o) {
+        public int compareTo(PriorityAction o) {
             return o.priority - this.priority;
         }
 
@@ -96,7 +98,7 @@ class Player6 {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
-            ProiortyAction action = (ProiortyAction) o;
+            PriorityAction action = (PriorityAction) o;
 
             if (row != action.row) return false;
             return col == action.col;
@@ -116,11 +118,12 @@ class Player6 {
 
     }
 
+    // 统计
     static class GridSum{
         int sum;
-        ArrayList<ProiortyAction> actions;
+        ArrayList<PriorityAction> actions;
 
-        public GridSum(int sum, ArrayList<ProiortyAction> actions) {
+        public GridSum(int sum, ArrayList<PriorityAction> actions) {
             this.sum = sum;
             this.actions = actions;
         }
@@ -128,217 +131,192 @@ class Player6 {
 
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
-        int[][] grid = new int[9][9];;
-        int[][] grid2 = new int[3][3];
-        ArrayList<ProiortyAction> allAction = new ArrayList<>();
+        int[][] ticTacToe = new int[9][9];              // Level 1 只会用到 3 * 3,
+        int[][] ticTacToeGrid = new int[3][3];          // Level 2 才会用到,大格子当前的比分状况
+
+        // 当前棋面所有可以下的操作
+        ArrayList<PriorityAction> allValidAction = new ArrayList<>();    
 
         while (true) {
             int opponentRow = in.nextInt();
             int opponentCol = in.nextInt();
-            ProiortyAction opponentAction = new ProiortyAction(opponentRow, opponentCol);
+            PriorityAction opponentAction = PriorityAction.getPriorityAction(opponentRow, opponentCol);
+
             int validActionCount = in.nextInt();
-
-
-            ArrayList<ProiortyAction> actions = new ArrayList<>();
+            ArrayList<PriorityAction> currentValidAction = new ArrayList<>();
             for (int i = 0; i < validActionCount; i++) {
                 int row = in.nextInt();
                 int col = in.nextInt();
-                ProiortyAction proiortyAction = new ProiortyAction(row, col);
-                if (!allAction.contains(proiortyAction)){
-                    allAction.add(proiortyAction);
+                PriorityAction priorityAction = PriorityAction.getPriorityAction(row, col);
+                if (! allValidAction.contains(priorityAction)){
+                    allValidAction.add(priorityAction);
                 }
-                actions.add(proiortyAction);
+                currentValidAction.add(priorityAction);
             }
 
+            // 判断对手当前操作是否有效
             if (opponentAction.row != -1){
-                grid[opponentAction.row][opponentAction.col] = G_OPPONENT;
-                playGame(grid, opponentAction, allAction);
-                checkWinner(grid, grid2, opponentAction, allAction, false);
+                ticTacToe[opponentAction.row][opponentAction.col] = G_OPPONENT;
+                checkProiorty(ticTacToe, opponentAction, allValidAction);
+                checkWinner(ticTacToe, ticTacToeGrid, opponentAction, allValidAction, false);
             }
 
-            List<ProiortyAction> otherAction = new ArrayList<>(allAction);
-            otherAction.removeAll(actions);
-
-            List<ProiortyAction> vaildAction = new ArrayList<>(allAction);
-            vaildAction.removeAll(otherAction);
-
-            PriorityQueue<ProiortyAction> queue = new PriorityQueue<>(vaildAction);
-            ProiortyAction poll = queue.poll();
-            allAction.remove(poll);
+            PriorityQueue<PriorityAction> queue = new PriorityQueue<>(currentValidAction);
+            PriorityAction poll = queue.poll();
+            allValidAction.remove(poll);
             System.out.println(poll);
-            grid[poll.row][poll.col] = G_PLAY;
-            playGame(grid, poll, allAction);
-            checkWinner(grid, grid2, poll, allAction, true);
+            ticTacToe[poll.row][poll.col] = G_PLAY;
+            checkProiorty(ticTacToe, poll, allValidAction);
+            checkWinner(ticTacToe, ticTacToeGrid, poll, allValidAction, true);
+            StringBuilder sb = new StringBuilder();
+            allValidAction.stream().forEach(item -> {
+                sb.append("( " + item.row + " , " + item.col + " ) = " + item.priority + "\n");
+            });
+            System.err.println(sb.toString());
         }
     }
 
-    private static void checkWinner(int[][] grid, int[][] grid2, ProiortyAction action, ArrayList<ProiortyAction> allAction, boolean isPlay) {
+    /**
+     * 判断小格子上是否已经有胜利者出现
+     * 只有level2级别才会使用这个函数
+     */
+    private static void checkWinner(int[][] ticTacToe, int[][] ticTacToeGrid, PriorityAction action, ArrayList<PriorityAction> allValidAction, boolean isPlay) {
         int gValue = isPlay ? G_PLAY : G_OPPONENT;
-        boolean isWin = false;
-        List<GridSum> gridSumList = checkGrid(action.ninePos, grid);
-        for (GridSum gridSum : gridSumList){
-            if (gridSum.sum == gValue * 3) {
-                isWin = true;
-                break;
-            }
-        }
-        if (!isWin){
+        List<GridSum> gridSumList = checkGrid(action.nineNumber, ticTacToe);
+        long count = gridSumList.stream().filter(item -> item.sum == gValue * 3).count();
+        if (count == 0){
             return;
         }
 
-        grid2[action.niceRow][action.niceCol] = gValue;
-        List<GridSum> gridAllSumList = checkGrid(0, grid2);
+        // 删除出现胜利者的其他还未使用的格子
+        List<PriorityAction> collect = allValidAction.stream().filter(item -> item.nineNumber == action.nineNumber).collect(Collectors.toList());
+        allValidAction.removeAll(collect);
+
+        ticTacToeGrid[action.niceRow][action.niceCol] = gValue;
+        List<GridSum> gridAllSumList = checkGrid(0, ticTacToeGrid);
         for (GridSum gridSum : gridAllSumList){
             if (gridSum.sum == 2 * G_PLAY){
-                ProiortyAction action1 = gridSum.actions.get(0);
-                if(canWin(action1.ninePos, grid)){
-                    addAllPriority(allAction, action1.row, action1.col,P_ALL_WIN);
+                PriorityAction action1 = gridSum.actions.get(0);
+                long winCount = checkGrid(action1.nineNumber, ticTacToe)
+                        .stream()
+                        .filter(item -> item.sum == 0 || item.sum == G_PLAY || item.sum == 2 * G_PLAY)
+                        .count();
+                if (winCount == 0){
+                    allValidAction.stream()
+                            .filter(item -> item.nineNumber == action1.nineNumber)
+                            .forEach(item -> item.addWinOrLosePriority(-P_ALL_WIN));
                 }else{
-                    addAllPriority(allAction, action1.row, action1.col,- P_ALL_WIN);
+                    allValidAction.stream()
+                            .filter(item -> item.nineNumber == action1.nineNumber)
+                            .forEach(item -> item.addWinOrLosePriority(P_ALL_WIN));
                 }
-                System.err.println("canWin --> " + allAction);
             }else if (gridSum.sum == 2 * G_OPPONENT){
-                ProiortyAction action2 = gridSum.actions.get(0);
-                if(canLose(action2.ninePos, grid)){
-                    addAllPriority(allAction, action2.row, action2.col,P_ALL_LOST);
-                }else{
-                    addAllPriority(allAction, action2.row, action2.col,- P_ALL_LOST);
+                PriorityAction action2 = gridSum.actions.get(0);
+                long loseCount = checkGrid(action2.nineNumber, ticTacToe).stream()
+                        .filter(item -> item.sum == 0 || item.sum == G_OPPONENT || item.sum == 2 * G_OPPONENT)
+                        .count();
+
+                if (loseCount == 0){
+                    allValidAction.stream()
+                            .filter(item -> item.nineNumber == action2.nineNumber)
+                            .forEach(item -> item.addWinOrLosePriority(- P_ALL_LOST));
+                }else {
+                    allValidAction.stream()
+                            .filter(item -> item.nineNumber == action2.nineNumber)
+                            .forEach(item -> item.addWinOrLosePriority(P_ALL_LOST));
                 }
-                System.err.println("canLose --> " + allAction);
             }
         }
     }
 
-    private static boolean canWin(int ninePos, int[][] grid) {
-        List<GridSum> gridSumList = checkGrid(ninePos, grid);
+    /**
+     *  检查权限
+     */
+    private static void checkProiorty(int[][] grid, PriorityAction action, ArrayList<PriorityAction> allValidAction) {
+        // 统计当前操作格子棋面情况
+        List<GridSum> gridSumList = checkGrid(action.nineNumber, grid);
         for (GridSum gridSum : gridSumList){
-            if (gridSum.sum <= 2*G_PLAY){
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean canLose(int ninePos, int[][] grid) {
-        List<GridSum> gridSumList = checkGrid(ninePos, grid);
-        for (GridSum gridSum : gridSumList){
-            if (gridSum.sum <= 2*G_PLAY){
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static void addAllPriority(ArrayList<ProiortyAction> allAction, int row, int col, int priority) {
-        for (int x = 0; x < 3; x++){
-            for (int y = 0; y < 3; y ++){
-                new ProiortyAction(row * 3 + x, col * 3 + y).addPriority(allAction, priority);
-            }
+            changeProiorty(gridSum, allValidAction);
         }
     }
 
-    private static void playGame(int[][] grid, ProiortyAction action, ArrayList<ProiortyAction> allAction) {
-        List<GridSum> gridSumList = checkGrid(action.ninePos, grid);
-        for (GridSum gridSum : gridSumList){
-            changeProiorty(gridSum, allAction);
-        }
-    }
-
-    private static void changeProiorty(GridSum gridSum, ArrayList<ProiortyAction> actions) {
+    private static void changeProiorty(GridSum gridSum, ArrayList<PriorityAction> actions) {
         if (gridSum.actions.isEmpty()){
             return;
         }
         if (gridSum.sum == G_PLAY * 2){
-            addWinPriority(actions, gridSum.actions);
+            gridSum.actions.forEach(item -> item.addWinOrLosePriority(P_WIN));
         }else if(gridSum.sum == G_OPPONENT * 2){
-            addLosePriority(actions, gridSum.actions);
+            gridSum.actions.forEach(item -> item.addWinOrLosePriority(P_LOSE));
         }else if (gridSum.sum == G_PLAY){
-            addStepPriority(actions, gridSum.actions, P_STEP * 5);
+            gridSum.actions.forEach(item -> item.addPriority(P_STEP * 5));
         }else if (gridSum.sum == G_OPPONENT){
-            addStepPriority(actions, gridSum.actions, P_STEP * 3);
-        }else if (gridSum.sum == 0){
-            addStepPriority(actions, gridSum.actions, P_STEP);
+            gridSum.actions.forEach(item -> item.addPriority(P_STEP * 3));
         }else if (gridSum.sum == G_PLAY + G_OPPONENT){
-            addStepPriority(actions, gridSum.actions, - P_STEP*5);
+            gridSum.actions.forEach(item -> item.addPriority(- P_STEP * 3));
         }
-        System.err.println("changeProiorty --> " + actions);
     }
 
-    private static List<GridSum> checkGrid(int ninePos, int[][] grid) {
-        int startRow = ninePos / 3 * 3;
-        int startCol = ninePos % 3 * 3;
+    /**
+     * 统计格子 横三竖三斜二的得分情况
+     */
+    private static List<GridSum> checkGrid(int nineNumber, int[][] grid) {
+        int startRow = nineNumber / 3 * 3;
+        int startCol = nineNumber / 3 * 3;
         List<GridSum> gridSumList = new ArrayList<>();
         for (int i = 0; i < 3; i ++){
-            ArrayList<ProiortyAction> rowAction = new ArrayList<>();
-            int rowSum = grid[startRow][startCol] + grid[startRow][startCol + 1] + grid[startRow][startCol + 2];
-            if (grid[startRow][startCol] == G_ENTMP){
-                rowAction.add(new ProiortyAction(startRow, startCol));
+            ArrayList<PriorityAction> rowAction = new ArrayList<>();
+            int rowSum = grid[startRow + i][startCol] + grid[startRow + i][startCol + 1] + grid[startRow + i][startCol + 2];
+            if (grid[startRow + i][startCol] == G_ENTMP){
+                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol));
             }
-            if (grid[startRow][startCol + 1] == G_ENTMP){
-                rowAction.add(new ProiortyAction(startRow, startCol + 1));
+            if (grid[startRow + i][startCol + 1] == G_ENTMP){
+                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol + 1));
             }
-            if (grid[startRow][startCol + 2] == G_ENTMP){
-                rowAction.add(new ProiortyAction(startRow, startCol + 2));
+            if (grid[startRow + i][startCol + 2] == G_ENTMP){
+                rowAction.add(PriorityAction.getPriorityAction(startRow + i, startCol + 2));
             }
             gridSumList.add(new GridSum(rowSum, rowAction));
 
-            ArrayList<ProiortyAction> colAction = new ArrayList<>();
-            int colSum = grid[startRow][startCol] + grid[startRow + 1][startCol] + grid[startRow + 2][startCol];
-            if (grid[startRow][startCol] == G_ENTMP){
-                colAction.add(new ProiortyAction(startRow, startCol));
+            ArrayList<PriorityAction> colAction = new ArrayList<>();
+            int colSum = grid[startRow][startCol + i] + grid[startRow + 1][startCol + i] + grid[startRow + 2][startCol + i];
+            if (grid[startRow][startCol + i] == G_ENTMP){
+                colAction.add(PriorityAction.getPriorityAction(startRow, startCol + i));
             }
-            if (grid[startRow + 1][startCol] == G_ENTMP){
-                colAction.add(new ProiortyAction(startRow + 1, startCol));
+            if (grid[startRow + 1][startCol + i] == G_ENTMP){
+                colAction.add(PriorityAction.getPriorityAction(startRow + 1, startCol + i));
             }
-            if (grid[startRow + 2][startCol] == G_ENTMP){
-                colAction.add(new ProiortyAction(startRow + 2, startCol));
+            if (grid[startRow + 2][startCol + i] == G_ENTMP){
+                colAction.add(PriorityAction.getPriorityAction(startRow + 2, startCol + i));
             }
             gridSumList.add(new GridSum(colSum, colAction));
         }
+
         int rake1Sum = grid[startRow][startCol] + grid[startRow + 1][startCol + 1] + grid[startRow + 2][startCol + 2];
-        ArrayList<ProiortyAction> rake1Action = new ArrayList<>();
+        ArrayList<PriorityAction> rake1Action = new ArrayList<>();
         if (grid[startRow][startCol] == G_ENTMP){
-            rake1Action.add(new ProiortyAction(startRow, startCol));
+            rake1Action.add(PriorityAction.getPriorityAction(startRow, startCol));
         }
         if (grid[startRow + 1][startCol + 1] == G_ENTMP){
-            rake1Action.add(new ProiortyAction(startRow + 1, startCol + 1));
+            rake1Action.add(PriorityAction.getPriorityAction(startRow + 1, startCol + 1));
         }
         if (grid[startRow + 2][startCol + 2] == G_ENTMP){
-            rake1Action.add(new ProiortyAction(startRow + 2, startCol + 2));
+            rake1Action.add(PriorityAction.getPriorityAction(startRow + 2, startCol + 2));
         }
         gridSumList.add(new GridSum(rake1Sum, rake1Action));
 
         int rake2Sum = grid[startRow + 2][startCol] + grid[startRow + 1][startCol + 1] + grid[startRow][startCol + 2];
-        ArrayList<ProiortyAction> rake2Action = new ArrayList<>();
+        ArrayList<PriorityAction> rake2Action = new ArrayList<>();
         if (grid[startRow + 2][startCol] == G_ENTMP){
-            rake2Action.add(new ProiortyAction(startRow + 2, startCol));
+            rake2Action.add(PriorityAction.getPriorityAction(startRow + 2, startCol));
         }
         if (grid[startRow + 1][startCol + 1] == G_ENTMP){
-            rake2Action.add(new ProiortyAction(startRow + 1, startCol + 1));
+            rake2Action.add(PriorityAction.getPriorityAction(startRow + 1, startCol + 1));
         }
         if (grid[startRow][startCol + 2] == G_ENTMP){
-            rake2Action.add(new ProiortyAction(startRow, startCol + 2));
+            rake2Action.add(PriorityAction.getPriorityAction(startRow, startCol + 2));
         }
         gridSumList.add(new GridSum(rake2Sum, rake2Action));
         return gridSumList;
     }
-
-    private static void addStepPriority(ArrayList<ProiortyAction> actions, ArrayList<ProiortyAction> emtryActions, int step) {
-        for (ProiortyAction action : emtryActions){
-            action.addPriority(actions, step);
-        }
-    }
-
-    private static void addLosePriority(ArrayList<ProiortyAction> actions, List<ProiortyAction> emtryActions) {
-        for (ProiortyAction action : emtryActions){
-            action.addPriority(actions, P_LOSE[action.nicePosition]);
-        }
-    }
-
-    private static void addWinPriority(ArrayList<ProiortyAction> actions, List<ProiortyAction> emtryActions) {
-        for (ProiortyAction action : emtryActions){
-            action.addPriority(actions, P_WIN[action.nicePosition]);
-        }
-    }
-
 }

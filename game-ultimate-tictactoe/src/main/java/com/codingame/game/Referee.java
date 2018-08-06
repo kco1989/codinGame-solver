@@ -217,7 +217,7 @@ public class Referee extends AbstractReferee {
         if (turn == 0 || turn == 1) {
             gameManager.setTurnMaxTime(1000);
         } else {
-            gameManager.setTurnMaxTime(100);
+            gameManager.setTurnMaxTime(1000);
         }
 
         sendInputs(player, validActions);
