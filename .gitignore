@@ -1,0 +1,13 @@
+/.idea
+/build
+
+.DS_Store
+/activemqbeat
+/activemqbeat.test
+*.pyc
+*.iml
+
+vendor/
+
+data/
+logs/
