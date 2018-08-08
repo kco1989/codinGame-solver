@@ -108,8 +108,8 @@ class Card {
      */
     String toAttack(Card otherCard){
         return otherCard != null ?
-                String.format("USE %d %d", this.instanceId, otherCard.instanceId) :
-                String.format("USE %d %d", this.instanceId, -1);
+                String.format("ATTACK %d %d", this.instanceId, otherCard.instanceId) :
+                String.format("ATTACK %d %d", this.instanceId, -1);
     }
 
     /**
@@ -124,8 +124,8 @@ class Card {
      */
     String toUse(Card otherCard){
         return otherCard != null ?
-                String.format("ATTACK %d %d", this.instanceId, otherCard.instanceId) :
-                String.format("ATTACK %d %d", this.instanceId, -1);
+                String.format("USE %d %d", this.instanceId, otherCard.instanceId) :
+                String.format("USE %d %d", this.instanceId, -1);
     }
 
     /**
@@ -211,7 +211,7 @@ class GameInfo{
     }
 }
 
-public class Player {
+class Player {
 
     public static void main(String args[]) {
         Scanner in = new Scanner(System.in);
@@ -227,7 +227,6 @@ public class Player {
                 play.rune = in.nextInt();
             }
             gameInfo.gameState = gameInfo.player.mana == 0 ? GameState.Draft : GameState.Battle;
-
             gameInfo.opponentHand = in.nextInt();
             gameInfo.cardCount = in.nextInt();
 
@@ -236,13 +235,13 @@ public class Player {
                 readCardInfo(in, card);
                 gameInfo.allCards.add(card);
                 if (card.location == 0){
-                    gameInfo.playerHandCreatureCards.add(card);
-                }else if(card.location == 1){
                     if (card.cardType == 0){
                         gameInfo.playerHandCreatureCards.add(card);
                     }else {
                         gameInfo.playerHandItemCards.add(card);
                     }
+                }else if(card.location == 1){
+                    gameInfo.playerSideCards.add(card);
                 }else {
                     gameInfo.opponentSideCards.add(card);
                 }
@@ -288,22 +287,24 @@ public class Player {
      * 攻击阶段
      */
     private static void doAttack(GameInfo gameInfo) {
+        System.err.println("进入攻击状态");
         // 自己场上没有怪兽， 则跳过攻击阶段
         if (gameInfo.playerSideCards.isEmpty()){
+            System.err.println("场上没有卡");
             return;
         }
         // 对面场上没有怪兽，直接攻击
         if (gameInfo.opponentSideCards.isEmpty()){
             gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
+            System.err.println("直接攻击对手");
             return;
         }
 
         // 处理攻击嘲讽怪
         List<Card> guardCards = gameInfo.opponentSideCards.stream().filter(item -> item.keywords.hasGuard).collect(Collectors.toList());
         if (! guardCards.isEmpty()){
-            gameInfo.opponentSideCards.removeAll(guardCards);
             guardCards = guardCards.stream().sorted(Comparator.comparingInt(o -> o.defense)).collect(Collectors.toList());
-            attackGuard(gameInfo.commandList, gameInfo, guardCards);
+            attackGuard(gameInfo, guardCards);
             // 场上没有怪兽了，则返回
             if (gameInfo.playerSideCards.isEmpty()){
                 return;
@@ -314,7 +315,7 @@ public class Player {
             }
         }
 
-
+        System.err.println("攻击对方其他怪");
         gameInfo.opponentSideCards = gameInfo.opponentSideCards.stream().sorted((o1, o2) -> {
             int score = 0;
             // 1. 把高攻低守的排前面
@@ -361,15 +362,17 @@ public class Player {
     /**
      * 攻击嘲讽怪
      */
-    private static void attackGuard(List<String> commandList, GameInfo gameInfo, List<Card> guardCards) {
-        gameInfo.playerSideCards = gameInfo.playerSideCards.stream().sorted((o1, o2) -> o1.attack - o2.attack).collect(Collectors.toList());
+    private static void attackGuard( GameInfo gameInfo, List<Card> guardCards) {
+        System.err.println("处理对手的嘲讽怪");
+        gameInfo.playerSideCards = gameInfo.playerSideCards.stream().sorted((o1, o2) -> o2.attack - o1.attack).collect(Collectors.toList());
         do{
             Card attack = gameInfo.playerSideCards.get(0);
             Card defense = guardCards.get(0);
-            commandList.add(attack.toAttack(defense));
+            gameInfo.commandList.add(attack.toAttack(defense));
+            System.err.println("guard -> " + attack.toAttack(defense));
             if (attack.attack >= defense.defense){
                 guardCards.remove(defense);
-
+                gameInfo.opponentSideCards.remove(defense);
             }
             // 不能再攻击了
             gameInfo.playerSideCards.remove(attack);
@@ -595,19 +598,20 @@ public class Player {
     }
 
     private static void asFarAsPossibleToSummon(GameInfo gameInfo) {
-        do {
-            int finalMana = gameInfo.player.mana;
-            Optional<Card> any = gameInfo.playerHandCreatureCards.stream().filter(card -> card.cost <= finalMana).findAny();
-            if (! any.isPresent()){
-                return;
-            }
-            Card card = any.get();
-            if (card.keywords.hasGuard){
-                gameInfo.playerSideCards.add(card);
-            }
-            gameInfo.playerHandCreatureCards.remove(card);
-            gameInfo.commandList.add(card.toSummom());
-            gameInfo.player.mana = gameInfo.player.mana - any.get().cost;
-        } while (gameInfo.player.mana > 0);
+
+        int[] mana = {gameInfo.player.mana};
+        gameInfo.playerHandCreatureCards.stream()
+                .filter(card -> card.cost <= gameInfo.player.mana)
+                .sorted((o1, o2) -> o2.attack - o1.attack)
+                .map(item -> {
+                    item.remainMana = mana[0] - item.cost;
+                    mana[0] = item.remainMana;
+                    return item;
+                })
+                .filter(item -> item.remainMana >= 0)
+                .forEach(item -> {
+                    gameInfo.commandList.add(item.toSummom());
+                    gameInfo.player.mana -= item.cost;
+                });
     }
 }
