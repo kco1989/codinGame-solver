@@ -406,20 +406,24 @@ public class Player {
             return true;
         }
 
+        if (gameInfo.playerSideCards.isEmpty()){
+            return isOneTurnKillWithBlueItem(gameInfo);
+        }
+
         // 过滤本回合可以直接攻击或者能造成伤害的怪
         Stream<Card> creatureStream = gameInfo.playerHandCreatureCards.stream()
                 // 过滤费用小于玩家法力值,且可以在本回合造成伤害的卡
                 .filter(item -> gameInfo.player.mana >= item.cost && (item.keywords.hasCharge || item.opponentHealthChange < 0));
 
-        // 过滤本回合可以造成伤害的蓝卡
-        Stream<Card> blueStream = gameInfo.playerHandItemCards.stream()
+        // 过滤本回合可以造成伤害的蓝卡/绿卡
+        Stream<Card> blueOrGreenStream = gameInfo.playerHandItemCards.stream()
                 // 过滤费用小于玩家法力值且蓝卡
-                .filter(item -> item.isBlueItem() && gameInfo.player.mana >= item.cost);
+                .filter(item -> (item.isBlueItem() || item.isGreenItem()) && gameInfo.player.mana >= item.cost);
 
         // 按照伤害值倒序排序
         final int[] playMana = {gameInfo.player.mana};
-        List<Card> collectCard = Stream.concat(creatureStream, blueStream)
-                .sorted((o1, o2) -> getBlueItemOrChargeHurt(o2) - getBlueItemOrChargeHurt(o1))
+        List<Card> collectCard = Stream.concat(creatureStream, blueOrGreenStream)
+                .sorted((o1, o2) -> getOneTurnHurtByHandCard(o2) - getOneTurnHurtByHandCard(o1))
                 // 计算如果被使用,玩家还会剩余的法力值
                 .map(item -> {
                     item.remainMana = playMana[0] - item.cost;
@@ -430,18 +434,22 @@ public class Player {
                 .collect(Collectors.toList());
 
         Integer sumHurt = collectCard.stream()
-                .map(Player::getBlueItemOrChargeHurt)
+                .map(Player::getOneTurnHurtByHandCard)
                 .reduce(0, (sum, item) -> sum += item);
 
         if (sumHurt + sumAttack >= gameInfo.opponenter.health) {
+
+            collectCard.stream().filter(item -> item.isGreenItem())
+                    .forEach(item -> item.toUse(creatureStream.findFirst().get()));
+
             collectCard.stream().forEach(item -> {
                         if (item.isBlueItem()) {
                             gameInfo.commandList.add(item.toUse());
-                        } else if (item.keywords.hasCharge) {
+                        } else if (item.isCreature()) {
                             gameInfo.commandList.add(item.toSummom());
-                            gameInfo.commandList.add(item.toAttack());
-                        } else {
-                            gameInfo.commandList.add(item.toSummom());
+                            if (item.keywords.hasCharge){
+                                gameInfo.commandList.add(item.toAttack());
+                            }
                         }
                     });
             gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
@@ -450,12 +458,48 @@ public class Player {
         return false;
     }
 
-    static int getBlueItemOrChargeHurt(Card card){
+    /**
+     * 仅仅使用蓝色牌能否一回杀
+     */
+    private static boolean isOneTurnKillWithBlueItem(GameInfo gameInfo) {
+        int[] mana = {gameInfo.player.mana};
+        List<Card> blueItems = gameInfo.playerHandItemCards.stream()
+                .filter(item -> item.isBlueItem() && item.cost <= gameInfo.player.mana)
+                .sorted((o1, o2) -> getOneTurnHurtByHandCard(o2) - getOneTurnHurtByHandCard(o1))
+                .map(item -> {
+                    item.remainMana = mana[0] - item.cost;
+                    mana[0] = item.remainMana;
+                    return item;
+                })
+                .filter(item -> item.remainMana >= 0)
+                .collect(Collectors.toList());
+        if (blueItems.isEmpty()){
+            return false;
+        }
+        Integer sumHurt = blueItems.stream()
+                .map(Player::getOneTurnHurtByHandCard)
+                .reduce(0, (sum, item) -> sum += item);
+        if (sumHurt >= gameInfo.opponenter.health){
+            blueItems.stream()
+                    .forEach(item -> gameInfo.commandList.add(item.toUse()));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 获取手牌一回合能造成的伤害
+     * @param card
+     * @return
+     */
+    static int getOneTurnHurtByHandCard(Card card){
         int hurt;
         if (card.isBlueItem()) {
             hurt = Math.abs(card.defense + card.opponentHealthChange);
         } else if (card.isCreature()){
             hurt = (card.keywords.hasCharge ? card.attack : 0) + Math.abs(card.opponentHealthChange);
+        }else if (card.isGreenItem()){
+            hurt = card.attack;
         }else {
             hurt = 0;
         }
@@ -497,6 +541,31 @@ public class Player {
             return;
         }
         // todo4lvsw how to use red or blue card
+        List<Card> highAttack = gameInfo.opponentSideCards.stream()
+                .filter(item -> item.attack >= 3)
+                .collect(Collectors.toList());
+        if (highAttack.isEmpty()){
+            return;
+        }
+        List<Card> deadCard = new ArrayList<>();
+        highAttack.stream().forEach(oppent -> {
+            if (oppent.keywords.hasWard){
+                return;
+            }
+            Optional<Card> first = redOrBlueCard.stream().filter(item -> Math.abs(item.defense) - oppent.defense >= 0)
+                    .sorted(Comparator.comparingInt(o -> o.cost))
+                    .findFirst();
+            if (first.isPresent()){
+                if (gameInfo.player.mana - first.get().cost < 0){
+                    return;
+                }
+                redOrBlueCard.remove(first.get());
+                gameInfo.commandList.add(first.get().toUse(oppent));
+                gameInfo.player.mana -= first.get().cost;
+                deadCard.add(oppent);
+            }
+        });
+        gameInfo.opponentSideCards.removeAll(deadCard);
     }
 
     private static void toUserGreenItem(GameInfo gameInfo) {
@@ -507,12 +576,22 @@ public class Player {
             return;
         }
         // todo4lvsw how to use green card
-        List<Card> collect = gameInfo.playerSideCards.stream()
-                .filter(item -> item.attack >= 3 || item.defense >= 3)
+        int[] mana = {gameInfo.player.mana};
+        List<Card> canUseGreenCard = greenCard.stream()
+                .map(item -> {
+                    item.remainMana = mana[0] - item.cost;
+                    mana[0] = item.remainMana;
+                    return item;
+                })
+                .filter(item -> item.remainMana >= 0)
                 .collect(Collectors.toList());
-        if (collect.isEmpty()){
-            return;
-        }
+        Integer sumCost = canUseGreenCard.stream().map(item -> item.cost)
+                .reduce(0, (sum, item) -> sum += item);
+        gameInfo.player.mana -= sumCost;
+        canUseGreenCard.stream().forEach(item -> {
+            gameInfo.commandList.add(item.toUse(gameInfo.playerSideCards.stream().findAny().get()));
+        });
+        gameInfo.playerHandItemCards.removeAll(canUseGreenCard);
     }
 
     private static void asFarAsPossibleToSummon(GameInfo gameInfo) {
