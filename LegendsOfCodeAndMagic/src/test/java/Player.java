@@ -23,6 +23,10 @@ class Keywords {
         return hasBreakthrough || hasCharge || hasDrain || hasGuard || hasLethal || hasWard;
     }
 
+    public boolean donotHasSomeKeyword(Keywords others){
+        return !hasSomeKeyword(others);
+    }
+
     public boolean hasSomeKeyword(Keywords others){
         return hasBreakthrough == others.hasBreakthrough ||
                 hasCharge == others.hasCharge ||
@@ -229,18 +233,7 @@ public class Player {
 
             for (int i = 0; i < gameInfo.cardCount; i++) {
                 Card card = new Card();
-                card.cardNumber = in.nextInt();
-                card.instanceId = in.nextInt();
-                card.location = in.nextInt();
-                card.cardType = in.nextInt();
-                card.cost = in.nextInt();
-                card.attack = in.nextInt();
-                card.defense = in.nextInt();
-                card.keywords = new Keywords(in.next());
-                card.myHealthChange = in.nextInt();
-                card.opponentHealthChange = in.nextInt();
-                card.cardDraw = in.nextInt();
-
+                readCardInfo(in, card);
                 gameInfo.allCards.add(card);
                 if (card.location == 0){
                     gameInfo.playerHandCreatureCards.add(card);
@@ -255,24 +248,40 @@ public class Player {
                 }
             }
 
-            // Write an action using System.out.println()
-            // To debug: System.err.println("Debug messages...");
+            // 随机拿卡
             if (gameInfo.gameState == GameState.Draft){
                 System.out.println("PICK " + random.nextInt(3));
                 continue;
             }
 
+            // 判断时候能一回杀
             if (isOneTurnKill(gameInfo)){
                 System.out.println(String.join(";", gameInfo.commandList));
                 continue;
             }
 
-            // 召唤
+            // 使用卡片
             doSummonOrUse(gameInfo);
 
+            // 攻击阶段
             doAttack(gameInfo);
+
             System.out.println(gameInfo.commandList.isEmpty() ? "PASS" : String.join(";", gameInfo.commandList));
         }
+    }
+
+    private static void readCardInfo(Scanner in, Card card) {
+        card.cardNumber = in.nextInt();
+        card.instanceId = in.nextInt();
+        card.location = in.nextInt();
+        card.cardType = in.nextInt();
+        card.cost = in.nextInt();
+        card.attack = in.nextInt();
+        card.defense = in.nextInt();
+        card.keywords = new Keywords(in.next());
+        card.myHealthChange = in.nextInt();
+        card.opponentHealthChange = in.nextInt();
+        card.cardDraw = in.nextInt();
     }
 
     /**
@@ -457,7 +466,6 @@ public class Player {
      */
     private static void doSummonOrUse(GameInfo gameInfo) {
 
-        int handCardCount = gameInfo.playerHandItemCards.size() + gameInfo.playerHandCreatureCards.size();
         long canUserCreatureCount = gameInfo.playerHandCreatureCards.stream()
                 .filter(item -> item.cost <= gameInfo.player.mana)
                 .count();
@@ -499,6 +507,12 @@ public class Player {
             return;
         }
         // todo4lvsw how to use green card
+        List<Card> collect = gameInfo.playerSideCards.stream()
+                .filter(item -> item.attack >= 3 || item.defense >= 3)
+                .collect(Collectors.toList());
+        if (collect.isEmpty()){
+            return;
+        }
     }
 
     private static void asFarAsPossibleToSummon(GameInfo gameInfo) {
