@@ -1,7 +1,7 @@
 import java.util.*;
 import java.util.stream.Collectors;
 
-class Player6 {
+class Player7test {
 
     public static final int P_ALL_WIN = 100000;         // 全局赢了
     public static final int P_ALL_LOST = 50000;         // 全局要输了
@@ -42,8 +42,7 @@ class Player6 {
         private int niceRow, niceCol;
         private int gridPosition, position;
         private int nineNumber;
-        private List<Integer> prioritys = new ArrayList<>();
-
+        private int priority;
 
         public static Map<String, PriorityAction> newPool(){
             return new HashMap<>();
@@ -56,8 +55,8 @@ class Player6 {
 
         private PriorityAction(int row, int col) {
             this.nineNumber = row / 3 * 3 + col / 3;
-            this.niceRow = row / 3;
-            this.niceCol = col / 3;
+            this.niceRow = this.nineNumber / 3;
+            this.niceCol = this.nineNumber % 3;
             this.row = row;
             this.col = col;
             if (this.niceRow == this.niceCol && this.niceRow == 1){
@@ -76,26 +75,24 @@ class Player6 {
             }else {
                 this.position = POS_SIDE;
             }
-            this.prioritys.add(PROIORTY[this.gridPosition][this.position]);
+            this.priority = PROIORTY[this.gridPosition][this.position];
         }
 
         public void addPriority(int priority){
-            prioritys.add(priority);
+            this.priority += priority;
         }
 
         public void addWinOrLosePriority(int priority){
-            if (! prioritys.contains(priority)){
-                prioritys.add(priority);
+            if (priority > 0 && this.priority < priority){
+                this.priority += priority;
+            }else if(priority < 0 && this.priority > -priority){
+                this.priority += priority;
             }
-        }
-
-        public int getPriorityValue(){
-            return this.prioritys.stream().reduce(0, (sum, item) -> sum = sum + item);
         }
 
         @Override
         public int compareTo(PriorityAction o) {
-            return o.getPriorityValue() - this.getPriorityValue();
+            return o.priority - this.priority;
         }
 
         @Override
@@ -118,7 +115,7 @@ class Player6 {
 
         @Override
         public String toString() {
-            return String.format("%d %d %s", this.row, this.col, "Come on !");
+            return String.format("%d %d %s", this.row, this.col, "Come on " + this.priority);
         }
 
     }
@@ -149,16 +146,21 @@ class Player6 {
             int opponentCol = in.nextInt();
             PriorityAction opponentAction = PriorityAction.getPriorityAction(gameInfo.poolAction, opponentRow, opponentCol);
 
-            int validActionCount = in.nextInt();
+//            int validActionCount = in.nextInt();
             ArrayList<PriorityAction> currentValidAction = new ArrayList<>();
-            for (int i = 0; i < validActionCount; i++) {
-                int row = in.nextInt();
-                int col = in.nextInt();
-                PriorityAction priorityAction = PriorityAction.getPriorityAction(gameInfo.poolAction, row, col);
-                if (! gameInfo.allValidAction.contains(priorityAction)){
-                    gameInfo.allValidAction.add(priorityAction);
+            for (int i = 0; i < 9; i ++){
+                for (int j = 0; j < 9; j ++){
+                    if (i == opponentRow && j == opponentCol){
+                        continue;
+                    }
+                    if (gameInfo.ticTacToe[i][j] == 0){
+                        PriorityAction priorityAction = PriorityAction.getPriorityAction(gameInfo.poolAction, i, j);
+                        if (! gameInfo.allValidAction.contains(priorityAction)){
+                            gameInfo.allValidAction.add(priorityAction);
+                        }
+                        currentValidAction.add(priorityAction);
+                    }
                 }
-                currentValidAction.add(priorityAction);
             }
 
             // 判断对手当前操作是否有效
@@ -176,7 +178,7 @@ class Player6 {
             checkProiorty(poll, gameInfo, true);
             StringBuilder sb = new StringBuilder();
             gameInfo.allValidAction.stream().forEach(item -> {
-                sb.append("(" + item.row + " " + item.col + ") = " + item.getPriorityValue() + "\n");
+                sb.append("( " + item.row + " , " + item.col + " ) = " + item.priority + "\n");
             });
             System.err.println(sb.toString());
         }
@@ -208,34 +210,32 @@ class Player6 {
         for (GridSum gridSum : gridAllSumList){
             if (gridSum.sum == 2 * G_PLAY){
                 PriorityAction action1 = gridSum.actions.get(0);
-                int niceNumber = action1.row * 3 + action1.col;
-                long winCount = checkGrid(niceNumber, gameInfo.ticTacToe, gameInfo)
+                long winCount = checkGrid(action1.nineNumber, gameInfo.ticTacToe, gameInfo)
                         .stream()
                         .filter(item -> item.sum == 0 || item.sum == G_PLAY || item.sum == 2 * G_PLAY)
                         .count();
                 if (winCount == 0){
                     gameInfo.allValidAction.stream()
-                            .filter(item -> item.nineNumber == niceNumber)
+                            .filter(item -> item.nineNumber == action1.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(-P_ALL_WIN));
                 }else{
                     gameInfo.allValidAction.stream()
-                            .filter(item -> item.nineNumber == niceNumber)
+                            .filter(item -> item.nineNumber == action1.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(P_ALL_WIN));
                 }
             }else if (gridSum.sum == 2 * G_OPPONENT){
                 PriorityAction action2 = gridSum.actions.get(0);
-                int niceNumber = action2.row * 3 + action2.col;
-                long loseCount = checkGrid(niceNumber, gameInfo.ticTacToe, gameInfo).stream()
+                long loseCount = checkGrid(action2.nineNumber, gameInfo.ticTacToe, gameInfo).stream()
                         .filter(item -> item.sum == 0 || item.sum == G_OPPONENT || item.sum == 2 * G_OPPONENT)
                         .count();
 
                 if (loseCount == 0){
                     gameInfo.allValidAction.stream()
-                            .filter(item -> item.nineNumber == niceNumber)
+                            .filter(item -> item.nineNumber == action2.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(- P_ALL_LOST));
                 }else {
                     gameInfo.allValidAction.stream()
-                            .filter(item -> item.nineNumber == niceNumber)
+                            .filter(item -> item.nineNumber == action2.nineNumber)
                             .forEach(item -> item.addWinOrLosePriority(P_ALL_LOST));
                 }
             }
