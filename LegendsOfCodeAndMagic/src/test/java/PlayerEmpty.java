@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
  * Game phase:
  * - do nothing (outputs single ';')
  * SUMMON id to summon the creature id from your hand.
- * ATTACK id1 id2 to attack creature id2 with creature id1.
- * ATTACK id -1 to attack the opponent directly with creature id.
+ * ATTACK id1 id2 to toAttack creature id2 with creature id1.
+ * ATTACK id -1 to toAttack the opponent directly with creature id.
  * PASS to do nothing this turn.
  * PICK
  */
@@ -79,7 +79,7 @@ public class PlayerEmpty {
                 int finalMana = mana;
                 Optional<Card> any = playerHandCards.stream().filter(card -> card.cost <= finalMana).findAny();
                 if (any.isPresent()) {
-                    list.add(any.get().summom());
+                    list.add(any.get().toSummom());
                     mana = mana - any.get().cost;
                 } else {
                     break;
@@ -90,7 +90,7 @@ public class PlayerEmpty {
             if (!playerSideCards.isEmpty()){
                 int sumAttack = playerSideCards.stream().map(item -> item.attack).reduce(0, (sum, item) -> sum + item);
                 if (sumAttack >= opponent.health || opponentSideCards.isEmpty()){
-                    playerSideCards.stream().forEach(item -> list.add(item.attack()));
+                    playerSideCards.stream().forEach(item -> list.add(item.toAttack()));
                     System.out.println(String.join(";", list));
                     continue;
                 }
@@ -102,7 +102,7 @@ public class PlayerEmpty {
                 for (Card card : opponentSideCards){
                     Optional<Card> first = playerSideCards.stream().filter(item -> item.attack >= card.defense && item.defense > item.attack).findFirst();
                     if (first.isPresent()){
-                        list.add(first.get().attack(card));
+                        list.add(first.get().toAttack(card));
                         playerSideCards.remove(first.get());
                     }
                 }
@@ -110,7 +110,7 @@ public class PlayerEmpty {
 
             // 还有未行动的怪兽
             if (! playerSideCards.isEmpty()){
-                playerHandCards.stream().forEach(item -> list.add(item.attack()));
+                playerHandCards.stream().forEach(item -> list.add(item.toAttack()));
             }
 
             System.out.println(String.join(";", list));

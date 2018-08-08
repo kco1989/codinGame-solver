@@ -1,27 +1,6 @@
 import java.util.*;
 import java.util.stream.Collectors;
 
-
-/**
- * AI description
- * Draft phase:
- * - always pick the first card
- * Game phase:
- * - do nothing (outputs single ';')
- * SUMMON id to summon the creature id from your hand.
- * ATTACK id1 id2 to attack creature id2 with creature id1.
- * ATTACK id -1 to attack the opponent directly with creature id.
- * USE id1 id2 to use item id1 on creature id2.
- * USE id -1 to use item id.
- * PASS to do nothing this turn.
- * PICK
- * BCDGLW
- * Breakthrough: Creatures with Breakthrough can deal extra damage to the opponent when they attack enemy creatures.
- *      If their attack damage is greater than the defending creature's defense, the excess damage is dealt to the opponent.
- * Charge: Creatures with Charge can attack the turn they are summoned.
- * Guard: Enemy creatures must attack creatures with Guard first.
- */
-
 /**
  * B -> breakthrough : 突破
  * C -> charge : 冲锋
@@ -90,24 +69,44 @@ class Card {
     int opponentHealthChange;    // 影响对方生命值
     int cardDraw;                // 影响下一轮抽卡
 
-    String summom(){
-        return "SUMMON " + this.instanceId;
+    /**
+     * 召唤
+     */
+    String toSummom(){
+        return String.format("SUMMON %d", this.instanceId);
     }
 
-    String attack(Card otherCard){
-        String result = "PASS";
-        if (otherCard != null){
-            result = "ATTACK " + this.instanceId + " " + otherCard.instanceId;
-        }else{
-            result = "ATTACK " + this.instanceId + " -1";
-        }
-        return result;
+    /**
+     * 攻击
+     */
+    String toAttack(Card otherCard){
+        return otherCard != null ?
+                String.format("USE %d %d", this.instanceId, otherCard.instanceId) :
+                String.format("USE %d %d", this.instanceId, -1);
     }
 
-    String attack(){
-        return attack(null);
+    /**
+     * 攻击
+     */
+    String toAttack(){
+        return toAttack(null);
     }
 
+    /**
+     * 使用
+     */
+    String toUse(Card otherCard){
+        return otherCard != null ?
+                String.format("ATTACK %d %d", this.instanceId, otherCard.instanceId) :
+                String.format("ATTACK %d %d", this.instanceId, -1);
+    }
+
+    /**
+     * 使用
+     */
+    String toUse(){
+        return toUse(null);
+    }
     @Override
     public String toString() {
         return "Card{" +
@@ -267,7 +266,7 @@ public class Player {
         }
         // 对面场上没有怪兽，直接攻击
         if (gameInfo.opponentSideCards.isEmpty()){
-            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.attack()));
+            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
             return;
         }
 
@@ -319,14 +318,14 @@ public class Player {
                 return result;
             }).findFirst();
             if (first.isPresent()){
-                commandList.add(first.get().attack(card));
+                commandList.add(first.get().toAttack(card));
                 gameInfo.playerSideCards.remove(first.get());
             }
         }
 
         // 还有未行动的怪兽
         if (! gameInfo.playerSideCards.isEmpty()){
-            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.attack()));
+            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
         }
 
     }
@@ -339,7 +338,7 @@ public class Player {
         do{
             Card attack = gameInfo.playerSideCards.get(0);
             Card defense = guardCards.get(0);
-            commandList.add(attack.attack(defense));
+            commandList.add(attack.toAttack(defense));
             if (attack.attack >= defense.defense){
                 guardCards.remove(defense);
 
@@ -361,7 +360,7 @@ public class Player {
             }
             int sumAttack = gameInfo.playerSideCards.stream().map(item -> item.attack).reduce(0, (sum, item) -> sum + item);
             if (sumAttack >= gameInfo.opponenter.health || gameInfo.opponentSideCards.isEmpty()){
-                gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.attack()));
+                gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
                 return true;
             }
         }
@@ -383,7 +382,7 @@ public class Player {
                 gameInfo.playerSideCards.add(card);
             }
             gameInfo.playerHandCreatureCards.remove(card);
-            commandList.add(card.summom());
+            commandList.add(card.toSummom());
             gameInfo.player.mana = gameInfo.player.mana - any.get().cost;
         } while (gameInfo.player.mana > 0);
     }
