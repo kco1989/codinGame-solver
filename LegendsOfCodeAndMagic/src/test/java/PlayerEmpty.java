@@ -51,7 +51,7 @@ public class PlayerEmpty {
                 card.cost = in.nextInt();
                 card.attack = in.nextInt();
                 card.defense = in.nextInt();
-                card.abilities = in.next();
+                card.keywords = new Keywords(in.next());
                 card.myHealthChange = in.nextInt();
                 card.opponentHealthChange = in.nextInt();
                 card.cardDraw = in.nextInt();

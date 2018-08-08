@@ -1,5 +1,6 @@
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * B -> breakthrough : 突破
@@ -22,6 +23,14 @@ class Keywords {
         return hasBreakthrough || hasCharge || hasDrain || hasGuard || hasLethal || hasWard;
     }
 
+    public boolean hasSomeKeyword(Keywords others){
+        return hasBreakthrough == others.hasBreakthrough ||
+                hasCharge == others.hasCharge ||
+                hasDrain == others.hasDrain ||
+                hasGuard == others.hasGuard ||
+                hasLethal == others.hasLethal ||
+                hasWard == others.hasWard;
+    }
     public Keywords(String data) {
         hasBreakthrough = data.charAt(0) == 'B';
         hasCharge = data.charAt(1) == 'C';
@@ -69,6 +78,20 @@ class Card {
     int opponentHealthChange;    // 影响对方生命值
     int cardDraw;                // 影响下一轮抽卡
 
+    int remainMana;             // 如果被使用,玩家剩余的法力值
+
+    boolean isCreature(){
+        return cardType == 0;
+    }
+    boolean isGreenItem(){
+        return cardType == 1;
+    }
+    boolean isRedItem(){
+        return cardType == 2;
+    }
+    boolean isBlueItem(){
+        return cardType == 3;
+    }
     /**
      * 召唤
      */
@@ -164,6 +187,7 @@ class GameInfo{
     List<Card> playerHandItemCards = new ArrayList<>();
     List<Card> playerSideCards = new ArrayList<>();
     List<Card> opponentSideCards = new ArrayList<>();
+    List<String> commandList = new ArrayList<>();
     int opponentHand;
     int cardCount;
 
@@ -238,35 +262,30 @@ public class Player {
                 continue;
             }
 
-
-            List<String> commandList = new ArrayList<>();
-            // 召唤
-            doSummon(commandList, gameInfo);
-            
-            if (isOpponentLose(commandList, gameInfo)){
-                System.out.println(String.join(";", commandList));
+            if (isOneTurnKill(gameInfo)){
+                System.out.println(String.join(";", gameInfo.commandList));
                 continue;
             }
-            doAttack(commandList, gameInfo);
-            if (commandList.isEmpty()){
-                System.out.println("PASS");
-            }else {
-                System.out.println(String.join(";", commandList));
-            }
+
+            // 召唤
+            doSummonOrUse(gameInfo);
+
+            doAttack(gameInfo);
+            System.out.println(gameInfo.commandList.isEmpty() ? "PASS" : String.join(";", gameInfo.commandList));
         }
     }
 
     /**
      * 攻击阶段
      */
-    private static void doAttack(List<String> commandList, GameInfo gameInfo) {
+    private static void doAttack(GameInfo gameInfo) {
         // 自己场上没有怪兽， 则跳过攻击阶段
         if (gameInfo.playerSideCards.isEmpty()){
             return;
         }
         // 对面场上没有怪兽，直接攻击
         if (gameInfo.opponentSideCards.isEmpty()){
-            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
+            gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
             return;
         }
 
@@ -275,13 +294,13 @@ public class Player {
         if (! guardCards.isEmpty()){
             gameInfo.opponentSideCards.removeAll(guardCards);
             guardCards = guardCards.stream().sorted(Comparator.comparingInt(o -> o.defense)).collect(Collectors.toList());
-            attackGuard(commandList, gameInfo, guardCards);
+            attackGuard(gameInfo.commandList, gameInfo, guardCards);
             // 场上没有怪兽了，则返回
             if (gameInfo.playerSideCards.isEmpty()){
                 return;
             }
             // 场上的还能再攻击的怪兽能打死对方
-            if (isOpponentLose(commandList, gameInfo)){
+            if (isOneTurnKill(gameInfo)){
                 return;
             }
         }
@@ -318,14 +337,14 @@ public class Player {
                 return result;
             }).findFirst();
             if (first.isPresent()){
-                commandList.add(first.get().toAttack(card));
+                gameInfo.commandList.add(first.get().toAttack(card));
                 gameInfo.playerSideCards.remove(first.get());
             }
         }
 
         // 还有未行动的怪兽
         if (! gameInfo.playerSideCards.isEmpty()){
-            gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
+            gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
         }
 
     }
@@ -349,28 +368,140 @@ public class Player {
     }
 
     /**
-     * 在对面没有嘲讽怪，且自己场上的怪的总攻大于对方生命时，直接攻击
+     * 判断能否一回杀
      */
-    private static boolean isOpponentLose(List<String> commandList, GameInfo gameInfo) {
-        // 计算场上自己场上怪攻击之和
-        if (! gameInfo.playerSideCards.isEmpty()){
-            long count = gameInfo.opponentSideCards.stream().filter(item -> item.keywords.hasGuard).count();
-            if (count > 0){
-                return false;
-            }
-            int sumAttack = gameInfo.playerSideCards.stream().map(item -> item.attack).reduce(0, (sum, item) -> sum + item);
-            if (sumAttack >= gameInfo.opponenter.health || gameInfo.opponentSideCards.isEmpty()){
-                gameInfo.playerSideCards.stream().forEach(item -> commandList.add(item.toAttack()));
-                return true;
-            }
+    private static boolean isOneTurnKill(GameInfo gameInfo) {
+        // 手牌和场上都没有怪直接返回
+        if (gameInfo.playerSideCards.isEmpty() && gameInfo.playerHandItemCards.isEmpty()){
+            return false;
+        }
+
+        // 对方场上嘲讽怪的数量
+        long guardCount = gameInfo.opponentSideCards.stream().filter(item -> item.keywords.hasGuard).count();
+        if (guardCount > 0){
+            return false;       // 如果有嘲讽怪,这暂时不处理,先处理对面场上的嘲讽怪先
+        }else{
+            return isOneTurnKillWithoutGuard(gameInfo);
+        }
+    }
+
+    /**
+     * 在对方在没有拥有嘲讽怪的情况下
+     * 判断时候能一回杀
+     */
+    private static boolean isOneTurnKillWithoutGuard(GameInfo gameInfo) {
+        // 计算场上总攻击力
+        int sumAttack = gameInfo.playerSideCards.stream().map(item -> item.attack).reduce(0, (sum, item) -> sum + item);
+        if (sumAttack >= gameInfo.opponenter.health){
+            gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
+            return true;
+        }
+
+        // 过滤本回合可以直接攻击或者能造成伤害的怪
+        Stream<Card> creatureStream = gameInfo.playerHandCreatureCards.stream()
+                // 过滤费用小于玩家法力值,且可以在本回合造成伤害的卡
+                .filter(item -> gameInfo.player.mana >= item.cost && (item.keywords.hasCharge || item.opponentHealthChange < 0));
+
+        // 过滤本回合可以造成伤害的蓝卡
+        Stream<Card> blueStream = gameInfo.playerHandItemCards.stream()
+                // 过滤费用小于玩家法力值且蓝卡
+                .filter(item -> item.isBlueItem() && gameInfo.player.mana >= item.cost);
+
+        // 按照伤害值倒序排序
+        final int[] playMana = {gameInfo.player.mana};
+        List<Card> collectCard = Stream.concat(creatureStream, blueStream)
+                .sorted((o1, o2) -> getBlueItemOrChargeHurt(o2) - getBlueItemOrChargeHurt(o1))
+                // 计算如果被使用,玩家还会剩余的法力值
+                .map(item -> {
+                    item.remainMana = playMana[0] - item.cost;
+                    playMana[0] = item.remainMana;
+                    return item;
+                })
+                .filter(item -> item.remainMana >= 0)
+                .collect(Collectors.toList());
+
+        Integer sumHurt = collectCard.stream()
+                .map(Player::getBlueItemOrChargeHurt)
+                .reduce(0, (sum, item) -> sum += item);
+
+        if (sumHurt + sumAttack >= gameInfo.opponenter.health) {
+            collectCard.stream().forEach(item -> {
+                        if (item.isBlueItem()) {
+                            gameInfo.commandList.add(item.toUse());
+                        } else if (item.keywords.hasCharge) {
+                            gameInfo.commandList.add(item.toSummom());
+                            gameInfo.commandList.add(item.toAttack());
+                        } else {
+                            gameInfo.commandList.add(item.toSummom());
+                        }
+                    });
+            gameInfo.playerSideCards.stream().forEach(item -> gameInfo.commandList.add(item.toAttack()));
+            return true;
         }
         return false;
     }
 
+    static int getBlueItemOrChargeHurt(Card card){
+        int hurt;
+        if (card.isBlueItem()) {
+            hurt = Math.abs(card.defense + card.opponentHealthChange);
+        } else if (card.isCreature()){
+            hurt = (card.keywords.hasCharge ? card.attack : 0) + Math.abs(card.opponentHealthChange);
+        }else {
+            hurt = 0;
+        }
+        return hurt;
+    }
     /**
      * 召唤怪兽
      */
-    private static void doSummon(List<String> commandList,GameInfo gameInfo) {
+    private static void doSummonOrUse(GameInfo gameInfo) {
+
+        int handCardCount = gameInfo.playerHandItemCards.size() + gameInfo.playerHandCreatureCards.size();
+        long canUserCreatureCount = gameInfo.playerHandCreatureCards.stream()
+                .filter(item -> item.cost <= gameInfo.player.mana)
+                .count();
+        long canUserItemCount = gameInfo.playerHandItemCards.stream()
+                .filter(item -> item.cost <= gameInfo.player.mana)
+                .count();
+
+        // 没有可以使用的牌
+        if (canUserCreatureCount + canUserItemCount == 0){
+            return;
+        }
+
+        // 如果对面场上没有怪,判断如何使用绿卡
+        // 如果对面场上有怪,判断如何使用红卡或者蓝卡
+        // 最后尽可能的召唤怪兽
+        if (gameInfo.opponentSideCards.isEmpty()){
+            toUserGreenItem(gameInfo);
+        }else {
+            toUserRedOrBlueItem(gameInfo);
+        }
+        asFarAsPossibleToSummon(gameInfo);
+    }
+
+    private static void toUserRedOrBlueItem(GameInfo gameInfo) {
+        List<Card> redOrBlueCard = gameInfo.playerHandItemCards.stream()
+                .filter(item -> (item.isBlueItem() || item.isRedItem()) && item.cost <= gameInfo.player.mana)
+                .collect(Collectors.toList());
+        if (redOrBlueCard.isEmpty()){
+            return;
+        }
+        // todo4lvsw how to use red or blue card
+    }
+
+    private static void toUserGreenItem(GameInfo gameInfo) {
+        List<Card> greenCard = gameInfo.playerHandItemCards.stream()
+                .filter(item -> item.isGreenItem() && item.cost <= gameInfo.player.mana)
+                .collect(Collectors.toList());
+        if (greenCard.isEmpty() || gameInfo.playerSideCards.isEmpty()){
+            return;
+        }
+        // todo4lvsw how to use green card
+    }
+
+    private static void asFarAsPossibleToSummon(GameInfo gameInfo) {
         do {
             int finalMana = gameInfo.player.mana;
             Optional<Card> any = gameInfo.playerHandCreatureCards.stream().filter(card -> card.cost <= finalMana).findAny();
@@ -382,7 +513,7 @@ public class Player {
                 gameInfo.playerSideCards.add(card);
             }
             gameInfo.playerHandCreatureCards.remove(card);
-            commandList.add(card.toSummom());
+            gameInfo.commandList.add(card.toSummom());
             gameInfo.player.mana = gameInfo.player.mana - any.get().cost;
         } while (gameInfo.player.mana > 0);
     }
