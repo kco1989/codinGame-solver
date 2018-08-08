@@ -1,7 +1,5 @@
-import java.awt.event.ItemEvent;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 /**
@@ -19,7 +17,7 @@ import java.util.stream.Stream;
 public class PlayerEmpty {
     public static void main(String args[]) {
         Scanner in = new Scanner(System.in);
-        PlayState playState = PlayState.Draft;
+        GameState playState = GameState.Draft;
         PlayInfo player = new PlayInfo();
         PlayInfo opponent = new PlayInfo();
         Random random = new Random(System.currentTimeMillis());
@@ -32,8 +30,8 @@ public class PlayerEmpty {
                 play.deck = in.nextInt();
                 play.rune = in.nextInt();
             }
-            playState = player.mana == 0 ? PlayState.Draft : PlayState.Battle;
-            System.err.println("playState -> " + playState);
+            playState = player.mana == 0 ? GameState.Draft : GameState.Battle;
+            System.err.println("gameState -> " + playState);
             System.err.println("player -> " + player);
             System.err.println("opponent -> " + opponent);
 
@@ -69,7 +67,7 @@ public class PlayerEmpty {
 
             // Write an action using System.out.println()
             // To debug: System.err.println("Debug messages...");
-            if (playState == PlayState.Draft){
+            if (playState == GameState.Draft){
                 System.out.println("PICK " + random.nextInt(3));
                 continue;
             }

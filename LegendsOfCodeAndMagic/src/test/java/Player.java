@@ -1,4 +1,3 @@
-import java.awt.event.ItemEvent;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,148 +22,169 @@ import java.util.stream.Collectors;
  * Guard: Enemy creatures must attack creatures with Guard first.
  */
 
+/**
+ * B -> breakthrough : 突破
+ * C -> charge : 冲锋
+ * D -> drain : 系命
+ * G -> guard : 嘲讽
+ * L -> lethal : 致命
+ * w -> ward : 护盾
+ */
+class Keywords {
+
+    boolean hasBreakthrough;     // 突破
+    boolean hasCharge;           // 冲锋
+    boolean hasDrain;            // 系命
+    boolean hasGuard;            // 嘲讽
+    boolean hasLethal;           // 致命
+    boolean hasWard;             // 护盾
+
+    public boolean hasAnyKeyword() {
+        return hasBreakthrough || hasCharge || hasDrain || hasGuard || hasLethal || hasWard;
+    }
+
+    public Keywords(String data) {
+        hasBreakthrough = data.charAt(0) == 'B';
+        hasCharge = data.charAt(1) == 'C';
+        hasDrain = data.charAt(2) == 'D';
+        hasGuard = data.charAt(3) == 'G';
+        hasLethal = data.charAt(4) == 'L';
+        hasWard = data.charAt(5) == 'W';
+    }
+
+    public Keywords(Keywords keywords) {
+        hasBreakthrough = keywords.hasBreakthrough;
+        hasCharge = keywords.hasCharge;
+        hasDrain = keywords.hasDrain;
+        hasGuard = keywords.hasGuard;
+        hasLethal = keywords.hasLethal;
+        hasWard = keywords.hasWard;
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(hasBreakthrough ? 'B' : '-');
+        sb.append(hasCharge ? 'C' : '-');
+        sb.append(hasDrain ? 'D' : '-');
+        sb.append(hasGuard ? 'G' : '-');
+        sb.append(hasLethal ? 'L' : '-');
+        sb.append(hasWard ? 'W' : '-');
+        return sb.toString();
+    }
+
+}
+
+/**
+ * 卡片信息
+ */
+class Card {
+    int cardNumber;              // 卡片唯一编号
+    int instanceId;              // 卡片实例id
+    int location;                // 0 在手牌  1， 在场上 2. 在对面场上
+    int cardType;                // 0: Creature  1: Green item 2: Red item 3: Blue item
+    int cost;                    // 需要消耗的费用
+    int attack;                  // 攻击力
+    int defense;                 // 守备力
+    Keywords keywords;
+    int myHealthChange;          // 影响自己生命值
+    int opponentHealthChange;    // 影响对方生命值
+    int cardDraw;                // 影响下一轮抽卡
+
+    String summom(){
+        return "SUMMON " + this.instanceId;
+    }
+
+    String attack(Card otherCard){
+        String result = "PASS";
+        if (otherCard != null){
+            result = "ATTACK " + this.instanceId + " " + otherCard.instanceId;
+        }else{
+            result = "ATTACK " + this.instanceId + " -1";
+        }
+        return result;
+    }
+
+    String attack(){
+        return attack(null);
+    }
+
+    @Override
+    public String toString() {
+        return "Card{" +
+                "cardNumber=" + cardNumber +
+                ", instanceId=" + instanceId +
+                ", location=" + location +
+                ", cardType=" + cardType +
+                ", cost=" + cost +
+                ", attack=" + attack +
+                ", defense=" + defense +
+                ", abilities='" + keywords + '\'' +
+                ", myHealthChange=" + myHealthChange +
+                ", opponentHealthChange=" + opponentHealthChange +
+                ", cardDraw=" + cardDraw +
+                '}';
+    }
+}
+
+/**
+ * 玩家信息
+ */
+class PlayInfo {
+    int health ;   // 生命力
+    int mana ;     // 法力值
+    int deck;      // 剩余卡牌
+    int rune ;     // to be ignored in this league
+
+    @Override
+    public String toString() {
+        return "PlayInfo{" +
+                "health=" + health +
+                ", mana=" + mana +
+                ", deck=" + deck +
+                ", rune=" + rune +
+                '}';
+    }
+}
+
+/**
+ * 游戏状态
+ */
+enum GameState {
+    Draft, Battle
+}
+
+/**
+ * 游戏西西里
+ */
+class GameInfo{
+    GameState gameState = GameState.Draft;
+    PlayInfo player = new PlayInfo();
+    PlayInfo opponenter = new PlayInfo();
+    List<Card> allCards = new ArrayList<>();
+    List<Card> playerHandCreatureCards = new ArrayList<>();
+    List<Card> playerHandItemCards = new ArrayList<>();
+    List<Card> playerSideCards = new ArrayList<>();
+    List<Card> opponentSideCards = new ArrayList<>();
+    int opponentHand;
+    int cardCount;
+
+    @Override
+    public String toString() {
+        return "GameInfo{" +
+                "gameState=" + gameState +
+                ", player=" + player +
+                ", opponenter=" + opponenter +
+                ", allCards=" + allCards +
+                ", playerHandCreatureCards=" + playerHandCreatureCards +
+                ", playerSideCards=" + playerSideCards +
+                ", opponentSideCards=" + opponentSideCards +
+                ", opponentHand=" + opponentHand +
+                ", cardCount=" + cardCount +
+                '}';
+    }
+}
+
 public class Player {
-    static class Card {
-        public int cardNumber;              // 卡片唯一编号
-        public int instanceId;              // 卡片实例id
-        public int location;                //  0 在手牌  1， 在场上 2. 在对面场上
-        public int cardType;                // always 0 for this league.
-        public int cost;                    // 需要消耗的费用
-        public int attack;                  // 攻击力
-        public int defense;                 // 守备力
-        public String abilities = "";            // 能力描述
-        public int myHealthChange;          //  to be ignored in this league.
-        public int opponentHealthChange;    // to be ignored in this league.
-        public int cardDraw;                // to be ignored in this league.
-
-        public String summom(){
-            return "SUMMON " + this.instanceId;
-        }
-
-        public String attack(Card otherCard){
-            String result = "PASS";
-            if (otherCard != null){
-                result = "ATTACK " + this.instanceId + " " + otherCard.instanceId;
-            }else{
-                result = "ATTACK " + this.instanceId + " -1";
-            }
-            return result;
-        }
-
-        public String attack(){
-            return attack(null);
-        }
-
-        /**
-         * 系命
-         */
-        public boolean isDrain(){
-            return this.abilities.lastIndexOf('D') > 0;
-        }
-
-        /**
-         * 致命
-         */
-        public boolean isLethal(){
-            return this.abilities.lastIndexOf('L') > 0;
-        }
-        /**
-         * 护盾
-         */
-        public boolean isWard(){
-            return this.abilities.lastIndexOf('W') > 0;
-        }
-        /**
-         * 是否有“突破”能力
-         * @return
-         */
-        public boolean isBreakthrough(){
-            return this.abilities.lastIndexOf('B') > 0;
-        }
-
-        /**
-         * 是否有“冲锋”能力
-         * @return
-         */
-        public boolean isCharge(){
-            return this.abilities.lastIndexOf('C') > 0;
-        }
-
-        /**
-         * 是否有“嘲讽”能力
-         * @return
-         */
-        public boolean isGuard(){
-            return this.abilities.lastIndexOf('G') > 0;
-        }
-        @Override
-        public String toString() {
-            return "Card{" +
-                    "cardNumber=" + cardNumber +
-                    ", instanceId=" + instanceId +
-                    ", location=" + location +
-                    ", cardType=" + cardType +
-                    ", cost=" + cost +
-                    ", attack=" + attack +
-                    ", defense=" + defense +
-                    ", abilities='" + abilities + '\'' +
-                    ", myHealthChange=" + myHealthChange +
-                    ", opponentHealthChange=" + opponentHealthChange +
-                    ", cardDraw=" + cardDraw +
-                    '}';
-        }
-    }
-
-    static class PlayInfo {
-        public int health ;   // 生命力
-        public int mana ;     // 法力值
-        public int deck;      // 剩余卡牌
-        public int rune ;     // to be ignored in this league
-
-        @Override
-        public String toString() {
-            return "PlayInfo{" +
-                    "health=" + health +
-                    ", mana=" + mana +
-                    ", deck=" + deck +
-                    ", rune=" + rune +
-                    '}';
-        }
-    }
-
-    enum PlayState {
-        Draft,
-        Battle;
-    }
-
-    static class GameInfo{
-        PlayState playState = PlayState.Draft;
-        PlayInfo player = new PlayInfo();
-        PlayInfo opponenter = new PlayInfo();
-        List<Card> allCards = new ArrayList<>();
-        List<Card> playerHandCards = new ArrayList<>();
-        List<Card> playerSideCards = new ArrayList<>();
-        List<Card> opponentSideCards = new ArrayList<>();
-        int opponentHand;
-        int cardCount;
-
-        @Override
-        public String toString() {
-            return "GameInfo{" +
-                    "playState=" + playState +
-                    ", player=" + player +
-                    ", opponenter=" + opponenter +
-                    ", allCards=" + allCards +
-                    ", playerHandCards=" + playerHandCards +
-                    ", playerSideCards=" + playerSideCards +
-                    ", opponentSideCards=" + opponentSideCards +
-                    ", opponentHand=" + opponentHand +
-                    ", cardCount=" + cardCount +
-                    '}';
-        }
-    }
-
-
 
     public static void main(String args[]) {
         Scanner in = new Scanner(System.in);
@@ -179,7 +199,7 @@ public class Player {
                 play.deck = in.nextInt();
                 play.rune = in.nextInt();
             }
-            gameInfo.playState = gameInfo.player.mana == 0 ? PlayState.Draft : PlayState.Battle;
+            gameInfo.gameState = gameInfo.player.mana == 0 ? GameState.Draft : GameState.Battle;
 
             gameInfo.opponentHand = in.nextInt();
             gameInfo.cardCount = in.nextInt();
@@ -193,16 +213,20 @@ public class Player {
                 card.cost = in.nextInt();
                 card.attack = in.nextInt();
                 card.defense = in.nextInt();
-                card.abilities = in.next();
+                card.keywords = new Keywords(in.next());
                 card.myHealthChange = in.nextInt();
                 card.opponentHealthChange = in.nextInt();
                 card.cardDraw = in.nextInt();
 
                 gameInfo.allCards.add(card);
                 if (card.location == 0){
-                    gameInfo.playerHandCards.add(card);
+                    gameInfo.playerHandCreatureCards.add(card);
                 }else if(card.location == 1){
-                    gameInfo.playerSideCards.add(card);
+                    if (card.cardType == 0){
+                        gameInfo.playerHandCreatureCards.add(card);
+                    }else {
+                        gameInfo.playerHandItemCards.add(card);
+                    }
                 }else {
                     gameInfo.opponentSideCards.add(card);
                 }
@@ -210,14 +234,13 @@ public class Player {
 
             // Write an action using System.out.println()
             // To debug: System.err.println("Debug messages...");
-            if (gameInfo.playState == PlayState.Draft){
+            if (gameInfo.gameState == GameState.Draft){
                 System.out.println("PICK " + random.nextInt(3));
                 continue;
             }
 
 
             List<String> commandList = new ArrayList<>();
-
             // 召唤
             doSummon(commandList, gameInfo);
             
@@ -249,10 +272,10 @@ public class Player {
         }
 
         // 处理攻击嘲讽怪
-        List<Card> guardCards = gameInfo.opponentSideCards.stream().filter(Card::isGuard).collect(Collectors.toList());
+        List<Card> guardCards = gameInfo.opponentSideCards.stream().filter(item -> item.keywords.hasGuard).collect(Collectors.toList());
         if (! guardCards.isEmpty()){
             gameInfo.opponentSideCards.removeAll(guardCards);
-            guardCards = guardCards.stream().sorted((o1, o2) -> o1.defense - o2.defense).collect(Collectors.toList());
+            guardCards = guardCards.stream().sorted(Comparator.comparingInt(o -> o.defense)).collect(Collectors.toList());
             attackGuard(commandList, gameInfo, guardCards);
             // 场上没有怪兽了，则返回
             if (gameInfo.playerSideCards.isEmpty()){
@@ -332,7 +355,7 @@ public class Player {
     private static boolean isOpponentLose(List<String> commandList, GameInfo gameInfo) {
         // 计算场上自己场上怪攻击之和
         if (! gameInfo.playerSideCards.isEmpty()){
-            long count = gameInfo.opponentSideCards.stream().filter(Card::isGuard).count();
+            long count = gameInfo.opponentSideCards.stream().filter(item -> item.keywords.hasGuard).count();
             if (count > 0){
                 return false;
             }
@@ -349,22 +372,19 @@ public class Player {
      * 召唤怪兽
      */
     private static void doSummon(List<String> commandList,GameInfo gameInfo) {
-        int mana = gameInfo.player.mana;
         do {
-            int finalMana = mana;
-            Optional<Card> any = gameInfo.playerHandCards.stream().filter(card -> card.cost <= finalMana).findAny();
+            int finalMana = gameInfo.player.mana;
+            Optional<Card> any = gameInfo.playerHandCreatureCards.stream().filter(card -> card.cost <= finalMana).findAny();
             if (! any.isPresent()){
-                System.err.println("doSummon Card: result " + any);
                 return;
             }
             Card card = any.get();
-            System.err.println("doSummon Card: " + card);
-            if (card.isCharge()){
+            if (card.keywords.hasGuard){
                 gameInfo.playerSideCards.add(card);
             }
-            gameInfo.playerHandCards.remove(card);
+            gameInfo.playerHandCreatureCards.remove(card);
             commandList.add(card.summom());
-            mana = mana - any.get().cost;
-        } while (mana > 0);
+            gameInfo.player.mana = gameInfo.player.mana - any.get().cost;
+        } while (gameInfo.player.mana > 0);
     }
 }
